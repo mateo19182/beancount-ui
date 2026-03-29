@@ -4,6 +4,11 @@ from pathlib import Path
 from beancount import loader
 
 
+def _escape_quotes(s: str) -> str:
+    """Escape double quotes for beancount string fields."""
+    return s.replace('"', "'") if s else s
+
+
 def format_transaction(
     date: str,
     flag: str,
@@ -19,15 +24,15 @@ def format_transaction(
     """
     header = f"{date} {flag}"
     if payee:
-        header += f' "{payee}"'
+        header += f' "{_escape_quotes(payee)}"'
     if narration:
-        header += f' "{narration}"'
+        header += f' "{_escape_quotes(narration)}"'
 
     lines = [header]
 
     if metadata:
         for key, value in metadata.items():
-            lines.append(f'  {key}: "{value}"')
+            lines.append(f'  {key}: "{_escape_quotes(str(value))}"')
 
     has_expense = any(p["account"].startswith("Expenses:") for p in postings)
     has_income = any(p["account"].startswith("Income:") for p in postings)
@@ -150,16 +155,15 @@ def find_transaction_file(ledger_dir: Path, date_str: str, payee: str | None, na
     if not tx_dir.exists():
         return None
 
-    patterns = _build_search_patterns(date_str, payee, narration)
-
-    for beancount_file in tx_dir.rglob("*.beancount"):
-        try:
-            content = beancount_file.read_text()
-            for pattern in patterns:
+    # Try most specific pattern first across all files
+    for pattern in _build_search_patterns(date_str, payee, narration):
+        for beancount_file in tx_dir.rglob("*.beancount"):
+            try:
+                content = beancount_file.read_text()
                 if pattern in content:
                     return beancount_file
-        except Exception:
-            continue
+            except Exception:
+                continue
 
     return None
 
@@ -172,21 +176,18 @@ def add_document_to_transaction(
         return False, f"File not found: {target_file}"
 
     lines = target_file.read_text().splitlines(keepends=True)
-    patterns = _build_search_patterns(date_str, payee, narration)
+    match_line = _find_transaction_line(lines, date_str, payee, narration)
+    if match_line is None:
+        return False, f"Transaction not found: {date_str} {payee}"
 
-    for i, line in enumerate(lines):
-        stripped = line.rstrip()
-        if any(stripped.startswith(p) for p in patterns):
-            # Check if document already exists
-            for j in range(i + 1, min(i + 5, len(lines))):
-                if "document:" in lines[j]:
-                    return False, "Transaction already has a document"
+    # Check if document already exists
+    for j in range(match_line + 1, min(match_line + 5, len(lines))):
+        if "document:" in lines[j]:
+            return False, "Transaction already has a document"
 
-            lines.insert(i + 1, f'  document: "{document_path}"\n')
-            target_file.write_text("".join(lines))
-            return True, f"Document added to transaction in {target_file.name}"
-
-    return False, f"Transaction not found: {date_str} {payee}"
+    lines.insert(match_line + 1, f'  document: "{document_path}"\n')
+    target_file.write_text("".join(lines))
+    return True, f"Document added to transaction in {target_file.name}"
 
 
 def edit_transaction(
@@ -206,46 +207,9 @@ def edit_transaction(
         return False, f"Transaction not found: {original_date} {original_payee}"
 
     lines = target_file.read_text().splitlines(keepends=True)
-    patterns = _build_search_patterns(original_date, original_payee, original_narration)
-
-    tx_start = -1
-    tx_end = -1
-    original_metadata = {}
-    original_posting_data = []
-
-    for i, line in enumerate(lines):
-        stripped = line.rstrip()
-        if not any(stripped.startswith(p) for p in patterns):
-            continue
-
-        tx_start = i
-        j = i + 1
-        while j < len(lines):
-            current = lines[j]
-            s = current.strip()
-
-            if not current.startswith("  ") and s and (s[0].isdigit() or s.startswith(";")):
-                break
-
-            if ": " in s[:50] and not s.startswith(";"):
-                parts = s.split(": ", 1)
-                if len(parts) == 2:
-                    original_metadata[parts[0].strip()] = parts[1].strip().strip('"')
-            elif s and not s.startswith(";"):
-                parts = s.split()
-                if len(parts) >= 3:
-                    try:
-                        original_posting_data.append({
-                            "account": parts[0],
-                            "amount": float(parts[1].replace(",", "")),
-                            "currency": parts[2],
-                        })
-                    except ValueError:
-                        pass
-            j += 1
-
-        tx_end = j
-        break
+    tx_start, tx_end, original_metadata, original_posting_data, parse_warnings = (
+        _parse_transaction_block(lines, original_date, original_payee, original_narration)
+    )
 
     if tx_start < 0:
         return False, f"Transaction not found in file: {original_date} {original_payee}"
@@ -260,10 +224,14 @@ def edit_transaction(
         original_metadata or None,
     )
 
+    warning = ""
+    if parse_warnings:
+        warning = f" (warnings: {'; '.join(parse_warnings)})"
+
     new_lines = lines[:tx_start] + [new_tx + "\n"] + lines[tx_end:]
     target_file.write_text("".join(new_lines))
 
-    return True, f"Transaction updated in {target_file.name}"
+    return True, f"Transaction updated in {target_file.name}{warning}"
 
 
 def delete_transaction(
@@ -278,34 +246,22 @@ def delete_transaction(
         return False, f"Transaction not found: {date_str} {payee}"
 
     lines = target_file.read_text().splitlines(keepends=True)
-    patterns = _build_search_patterns(date_str, payee, narration)
-
-    tx_start = -1
-    tx_end = -1
-
-    for i, line in enumerate(lines):
-        stripped = line.rstrip()
-        if not any(stripped.startswith(p) for p in patterns):
-            continue
-
-        tx_start = i
-        j = i + 1
-        while j < len(lines):
-            current = lines[j]
-            s = current.strip()
-            if not current.startswith("  ") and s and (s[0].isdigit() or s.startswith(";")):
-                break
-            j += 1
-        tx_end = j
-
-        # Also remove any blank lines immediately before the transaction
-        while tx_start > 0 and lines[tx_start - 1].strip() == "":
-            tx_start -= 1
-
-        break
-
-    if tx_start < 0:
+    tx_start = _find_transaction_line(lines, date_str, payee, narration)
+    if tx_start is None:
         return False, f"Transaction not found in file: {date_str} {payee}"
+
+    # Find end of transaction block
+    tx_end = tx_start + 1
+    while tx_end < len(lines):
+        current = lines[tx_end]
+        s = current.strip()
+        if not current.startswith("  ") and s and (s[0].isdigit() or s.startswith(";")):
+            break
+        tx_end += 1
+
+    # Also remove trailing blank lines
+    while tx_start > 0 and lines[tx_start - 1].strip() == "":
+        tx_start -= 1
 
     new_lines = lines[:tx_start] + lines[tx_end:]
     target_file.write_text("".join(new_lines))
@@ -313,13 +269,78 @@ def delete_transaction(
     return True, f"Transaction deleted from {target_file.name}"
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
 def _build_search_patterns(date_str: str, payee: str | None, narration: str | None) -> list[str]:
     """Build patterns from most specific to least specific, matching both * and ! flags."""
+    escaped_payee = _escape_quotes(payee) if payee else None
+    escaped_narration = _escape_quotes(narration) if narration else None
+
     patterns = []
-    if payee and narration:
-        patterns.append(f'{date_str} * "{payee}" "{narration}"')
-        patterns.append(f'{date_str} ! "{payee}" "{narration}"')
-    if payee:
-        patterns.append(f'{date_str} * "{payee}"')
-        patterns.append(f'{date_str} ! "{payee}"')
+    for flag in ("*", "!"):
+        if escaped_payee and escaped_narration:
+            patterns.append(f'{date_str} {flag} "{escaped_payee}" "{escaped_narration}"')
+    for flag in ("*", "!"):
+        if escaped_payee:
+            patterns.append(f'{date_str} {flag} "{escaped_payee}"')
     return patterns
+
+
+def _find_transaction_line(lines: list[str], date_str: str, payee: str | None, narration: str | None) -> int | None:
+    """Find the line index of a transaction header. Returns None if not found.
+
+    Tries the most specific pattern first (date+payee+narration),
+    then falls back to less specific ones.
+    """
+    patterns = _build_search_patterns(date_str, payee, narration)
+    for pattern in patterns:
+        for i, line in enumerate(lines):
+            if line.rstrip().startswith(pattern):
+                return i
+    return None
+
+
+def _parse_transaction_block(
+    lines: list[str], date_str: str, payee: str | None, narration: str | None
+) -> tuple[int, int, dict, list[dict], list[str]]:
+    """Parse a transaction block from file lines.
+
+    Returns (tx_start, tx_end, metadata, postings, warnings).
+    Returns (-1, -1, {}, [], []) if not found.
+    """
+    tx_start = _find_transaction_line(lines, date_str, payee, narration)
+    if tx_start is None:
+        return -1, -1, {}, [], []
+
+    metadata = {}
+    postings = []
+    warnings = []
+
+    j = tx_start + 1
+    while j < len(lines):
+        current = lines[j]
+        s = current.strip()
+
+        if not current.startswith("  ") and s and (s[0].isdigit() or s.startswith(";")):
+            break
+
+        if ": " in s[:50] and not s.startswith(";"):
+            parts = s.split(": ", 1)
+            if len(parts) == 2:
+                metadata[parts[0].strip()] = parts[1].strip().strip('"')
+        elif s and not s.startswith(";"):
+            parts = s.split()
+            if len(parts) >= 3:
+                try:
+                    postings.append({
+                        "account": parts[0],
+                        "amount": float(parts[1].replace(",", "")),
+                        "currency": parts[2],
+                    })
+                except ValueError:
+                    warnings.append(f"Could not parse posting: {s}")
+        j += 1
+
+    return tx_start, j, metadata, postings, warnings

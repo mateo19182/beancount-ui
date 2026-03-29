@@ -31,7 +31,7 @@ Requires Python 3.12+. If you don't pass a ledger path, the app shows a file pic
 
 **Add Transaction** — Create multi-posting transactions with real-time balance validation, beancount preview, and optional document upload.
 
-**Import Review** *(optional, requires banking plugin)* — Fetch transactions from banks via [Enable Banking API](https://enablebanking.com/), auto-categorize from learned payee patterns, review in an editable grid with dropdown categories, import to ledger or discard.
+**Import Review** — Fetch transactions from banks via [Enable Banking API](https://enablebanking.com/), auto-categorize from learned payee patterns, review in an editable grid with dropdown categories, import to ledger or discard.
 
 ## Configuration
 
@@ -64,16 +64,6 @@ country = "ES"
 [enable_banking.banks.caixa_rural]
 name = "Caixa Rural Galega"
 country = "ES"
-```
-
-### Bank import setup
-
-```bash
-# Install optional dependencies
-uv sync --extra banking
-
-# Set enable_banking.enabled = true in config.toml
-# Then authorize banks via the Enable Banking OAuth flow
 ```
 
 ## Project Structure
@@ -109,7 +99,8 @@ beancount-ui/
 
 The app loads your beancount ledger once into a `Ledger` object that stays in memory. Pages read from it, write operations append to your `.beancount` files, then `ledger.reload()` re-parses from disk. No caching layer needed — beancount parses personal ledgers in under a second.
 
-Stock and crypto positions are detected automatically by commodity type (non-fiat commodities with price entries), not by hardcoded account paths. Base currency is read from your beancount `operating_currency` option.
+Stock and crypto positions are detected automatically by commodity type (non-fiat commodities with price entries).
+Base currency is read from your beancount `operating_currency` option.
 
 ## License
 

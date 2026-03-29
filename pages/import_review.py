@@ -5,7 +5,7 @@ from pathlib import Path
 from nicegui import ui
 import state
 from core.categorizer import learn_from_ledger, suggest_account, get_all_expense_income_accounts
-from core.transaction_writer import write_transaction, verify_ledger
+from core.transaction_writer import format_transaction, write_transaction, verify_ledger
 from components.layout import page_layout
 from components.date_input import date_input
 
@@ -271,30 +271,32 @@ def import_review_page():
             with ui.row().classes("gap-4 mt-4"):
                 async def on_import():
                     selected_rows = await grid.get_selected_rows()
-
                     if not selected_rows:
                         ui.notify("No transactions selected", type="warning")
                         return
 
-                    # Also get all client data to pick up inline edits
+                    # get_client_data has the latest inline edits
                     all_grid_rows = await grid.get_client_data()
                     edited_by_idx = {r["idx"]: r for r in all_grid_rows}
+                    selected_idxs = {r["idx"] for r in selected_rows}
 
                     success_count = 0
                     error_count = 0
 
-                    for row in selected_rows:
-                        idx = row["idx"]
+                    for idx in selected_idxs:
                         txn = all_txns[idx]
-                        # Use edited values from the grid
-                        edited = edited_by_idx.get(idx, row)
+                        edited = edited_by_idx.get(idx, {})
+
+                        # Prefer grid-edited values over original staging data
+                        payee = edited.get("payee") or txn.get("payee", "")
+                        narration = edited.get("narration") or txn.get("narration", "")
                         category = edited.get("category") or txn.get("category")
                         if not category:
                             error_count += 1
                             continue
 
-                        txn["payee"] = edited.get("payee", txn["payee"])
-                        txn["narration"] = edited.get("narration", txn["narration"])
+                        txn["payee"] = payee
+                        txn["narration"] = narration
                         txn["category"] = category
 
                         flag = "!" if txn.get("status") == "Pending" else "*"
@@ -302,13 +304,15 @@ def import_review_page():
                         amount = txn.get("amount", 0)
                         currency = txn.get("currency", "EUR")
 
-                        tx_str = f'{txn["date"]} {flag} "{txn["payee"]}" "{txn["narration"]}"\n'
-                        tx_str += f'  transaction_id: "{txn.get("id", "")}"\n'
-                        tx_str += f'  source: "{txn.get("bank_key", "")}"\n'
+                        metadata = {"transaction_id": txn.get("id", ""), "source": txn.get("bank_key", "")}
                         if txn.get("document_path"):
-                            tx_str += f'  document: "{txn["document_path"]}"\n'
-                        tx_str += f"  {category:<40} {-amount:>12.2f} {currency}\n"
-                        tx_str += f"  {bank_account:<40} {amount:>12.2f} {currency}\n"
+                            metadata["document"] = txn["document_path"]
+
+                        postings = [
+                            {"account": category, "amount": -amount, "currency": currency},
+                            {"account": bank_account, "amount": amount, "currency": currency},
+                        ]
+                        tx_str = format_transaction(txn["date"], flag, payee, narration, postings, metadata)
 
                         month_key = txn["date"][:7]
                         target = ledger.ledger_path.parent / "transactions" / "banks" / f"{month_key}.beancount"

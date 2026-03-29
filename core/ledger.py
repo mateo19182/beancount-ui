@@ -21,6 +21,7 @@ class Ledger:
         self.price_map = None
         self._accounts: list[str] | None = None
         self._currencies: set[str] | None = None
+        self._realized = None
         self.load()
 
     def load(self):
@@ -30,6 +31,7 @@ class Ledger:
         self.price_map = prices.build_price_map(self.entries)
         self._accounts = None
         self._currencies = None
+        self._realized = None
 
     def reload(self):
         self.load()
@@ -65,7 +67,10 @@ class Ledger:
         return self._currencies
 
     def realize(self):
-        return realization.realize(self.entries)
+        """Return realized account tree. Cached until reload()."""
+        if self._realized is None:
+            self._realized = realization.realize(self.entries)
+        return self._realized
 
     def get_account_balances(self, node, account_path: str = "") -> list[dict]:
         """Recursively extract balances from a realized account tree node."""
