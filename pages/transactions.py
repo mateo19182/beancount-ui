@@ -5,11 +5,12 @@ from nicegui import ui
 import state
 from core.analytics import get_all_transactions
 from core.transaction_writer import (
-    edit_transaction, verify_ledger, find_transaction_file,
+    edit_transaction, delete_transaction, verify_ledger, find_transaction_file,
     add_document_to_transaction,
 )
 from core.document_handler import save_document
 from components.layout import page_layout
+from components.date_input import date_input
 
 
 @ui.page("/transactions")
@@ -24,8 +25,8 @@ def transactions_page():
             with ui.row().classes("w-full gap-4 flex-wrap"):
                 end = date.today()
                 start = end - timedelta(days=365)
-                date_from = ui.date(label="From", value=start.isoformat()).props("outlined dense")
-                date_to = ui.date(label="To", value=end.isoformat()).props("outlined dense")
+                date_from = date_input("From", start.isoformat())
+                date_to = date_input("To", end.isoformat())
 
                 type_options = ["All", "Income", "Expenses", "Assets", "Liabilities"]
                 type_filter = ui.select(type_options, value="All", label="Type").props("outlined dense").classes("w-36")
@@ -97,6 +98,7 @@ def transactions_page():
                                 _edit_button(tx, ledger)
                                 if not tx["has_document"]:
                                     _doc_button(tx, ledger)
+                                _delete_button(tx, ledger)
 
         # Trigger render on filter changes
         for widget in [type_filter, account_filter, search_input]:
@@ -115,7 +117,7 @@ def _edit_button(tx: dict, ledger):
             ui.label("Edit Transaction").classes("text-h6")
 
             with ui.row().classes("w-full gap-4"):
-                edit_date = ui.date(label="Date", value=str(tx["date"])).props("outlined dense")
+                edit_date = date_input("Date", str(tx["date"]))
                 edit_flag = ui.select(["*", "!"], value=tx.get("flag", "*"), label="Flag").props("outlined dense")
 
             edit_payee = ui.input(label="Payee", value=tx["payee"]).props("outlined dense").classes("w-full")
@@ -235,3 +237,44 @@ def _doc_button(tx: dict, ledger):
         dialog.open()
 
     ui.button("Add Doc", on_click=open_doc_dialog, icon="attach_file").props("flat dense")
+
+
+def _delete_button(tx: dict, ledger):
+    """Create a delete button with confirmation dialog."""
+
+    async def open_delete_dialog():
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-md"):
+            ui.label("Delete Transaction").classes("text-h6")
+            ui.label("Are you sure you want to delete this transaction?").classes("text-sm")
+
+            with ui.column().classes("w-full border-l-4 border-red-400 pl-3 mt-2"):
+                ui.label(f"{tx['date']} — {tx['payee']}").classes("font-bold")
+                ui.label(tx["narration"]).classes("text-sm opacity-70")
+                ui.label(tx["amount_str"]).classes("text-sm")
+
+            with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                ui.button("Cancel", on_click=dialog.close).props("flat")
+
+                async def confirm_delete():
+                    success, msg = delete_transaction(
+                        ledger.ledger_path.parent,
+                        str(tx["date"]),
+                        tx["payee"],
+                        tx["narration"],
+                    )
+                    if success:
+                        valid, check_msg = verify_ledger(ledger.ledger_path)
+                        ledger.reload()
+                        ui.notify(msg, type="positive")
+                        if not valid:
+                            ui.notify(check_msg, type="warning")
+                        dialog.close()
+                        ui.navigate.reload()
+                    else:
+                        ui.notify(msg, type="negative")
+
+                ui.button("Delete", on_click=confirm_delete, icon="delete").props("color=negative")
+
+        dialog.open()
+
+    ui.button("Delete", on_click=open_delete_dialog, icon="delete").props("flat dense color=negative")

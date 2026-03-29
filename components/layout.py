@@ -8,8 +8,6 @@ import state
 @contextmanager
 def page_layout(title: str):
     """Page wrapper with navigation header and centered content."""
-    banking_enabled = state.config and state.config.banking.enabled
-
     ui.colors(primary="#1a73e8")
 
     with ui.header().classes("items-center justify-between bg-primary px-6"):
@@ -22,8 +20,7 @@ def page_layout(title: str):
             _nav_button("Crypto", "/crypto")
             _nav_button("Transactions", "/transactions")
             _nav_button("Add", "/add")
-            if banking_enabled:
-                _nav_button("Import", "/import")
+            _nav_button("Import", "/import")
 
         with ui.row().classes("items-center"):
             async def on_reload():

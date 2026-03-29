@@ -20,11 +20,7 @@ def run():
     import pages.transactions
     import pages.add_transaction
 
-    if config.banking.enabled:
-        try:
-            import pages.import_review
-        except ImportError:
-            pass
+    import pages.import_review
 
     ui.run(
         title="Beancount",

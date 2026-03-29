@@ -266,11 +266,60 @@ def edit_transaction(
     return True, f"Transaction updated in {target_file.name}"
 
 
+def delete_transaction(
+    ledger_dir: Path,
+    date_str: str,
+    payee: str | None,
+    narration: str | None,
+) -> tuple[bool, str]:
+    """Find and remove a transaction from the ledger files."""
+    target_file = find_transaction_file(ledger_dir, date_str, payee, narration)
+    if not target_file:
+        return False, f"Transaction not found: {date_str} {payee}"
+
+    lines = target_file.read_text().splitlines(keepends=True)
+    patterns = _build_search_patterns(date_str, payee, narration)
+
+    tx_start = -1
+    tx_end = -1
+
+    for i, line in enumerate(lines):
+        stripped = line.rstrip()
+        if not any(stripped.startswith(p) for p in patterns):
+            continue
+
+        tx_start = i
+        j = i + 1
+        while j < len(lines):
+            current = lines[j]
+            s = current.strip()
+            if not current.startswith("  ") and s and (s[0].isdigit() or s.startswith(";")):
+                break
+            j += 1
+        tx_end = j
+
+        # Also remove any blank lines immediately before the transaction
+        while tx_start > 0 and lines[tx_start - 1].strip() == "":
+            tx_start -= 1
+
+        break
+
+    if tx_start < 0:
+        return False, f"Transaction not found in file: {date_str} {payee}"
+
+    new_lines = lines[:tx_start] + lines[tx_end:]
+    target_file.write_text("".join(new_lines))
+
+    return True, f"Transaction deleted from {target_file.name}"
+
+
 def _build_search_patterns(date_str: str, payee: str | None, narration: str | None) -> list[str]:
+    """Build patterns from most specific to least specific, matching both * and ! flags."""
     patterns = []
     if payee and narration:
         patterns.append(f'{date_str} * "{payee}" "{narration}"')
+        patterns.append(f'{date_str} ! "{payee}" "{narration}"')
     if payee:
         patterns.append(f'{date_str} * "{payee}"')
-    patterns.append(f"{date_str} *")
+        patterns.append(f'{date_str} ! "{payee}"')
     return patterns

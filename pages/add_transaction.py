@@ -9,6 +9,7 @@ from core.transaction_writer import (
 )
 from core.document_handler import save_document
 from components.layout import page_layout
+from components.date_input import date_input
 
 
 @ui.page("/add")
@@ -21,7 +22,7 @@ def add_transaction_page():
     with page_layout("Add Transaction"):
         # --- Basic info ---
         with ui.row().classes("w-full gap-4 items-end"):
-            tx_date = ui.date(label="Date", value=date.today().isoformat()).props("outlined dense")
+            tx_date = date_input("Date", date.today().isoformat())
             tx_flag = ui.select(["*", "!"], value="*", label="Flag").props("outlined dense").classes("w-20")
             tx_payee = ui.input(label="Payee", placeholder="Who was it?").props("outlined dense").classes("flex-grow")
             tx_narration = ui.input(label="Narration", placeholder="What for?").props("outlined dense").classes("flex-grow")
@@ -47,12 +48,12 @@ def add_transaction_page():
         postings_container = ui.column().classes("w-full gap-2")
         posting_widgets: list[dict] = []
 
-        def add_posting(account: str = "", amount: float = 0.0, currency: str = base_currency):
+        def add_posting(account: str | None = None, amount: float = 0.0, currency: str = base_currency):
             with postings_container:
                 with ui.row().classes("w-full gap-2 items-center") as row:
                     acc = ui.select(
                         all_accounts, value=account, label="Account",
-                        with_input=True,
+                        with_input=True, clearable=True,
                     ).props("outlined dense").classes("flex-grow")
                     amt = ui.number(label="Amount", value=amount, format="%.2f").props("outlined dense").classes("w-36")
                     cur = ui.select(all_currencies, value=currency, label="Currency").props("outlined dense").classes("w-28")
@@ -110,11 +111,11 @@ def add_transaction_page():
             with balance_display:
                 for cur, total in balance.items():
                     balanced = abs(total) < 0.015
-                    icon = "check_circle" if balanced else "error"
+                    icon_name = "check_circle" if balanced else "error"
                     color = "text-green-600" if balanced else "text-red-600"
-                    ui.row().classes("items-center gap-1").style("gap: 4px") \
-                        .add(ui.icon(icon).classes(color)) \
-                        .add(ui.label(f"{cur}: {total:+.2f}").classes(f"text-sm {color}"))
+                    with ui.row().classes("items-center").style("gap: 4px"):
+                        ui.icon(icon_name).classes(color)
+                        ui.label(f"{cur}: {total:+.2f}").classes(f"text-sm {color}")
                     if not balanced:
                         all_balanced = False
 

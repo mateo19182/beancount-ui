@@ -39,6 +39,7 @@ def fetch_bank_transactions(
         accounts = session.get("accounts", [])
 
         accounts_data = []
+        errors = []
         for account in accounts:
             uid = account.get("uid")
             try:
@@ -50,7 +51,7 @@ def fetch_bank_transactions(
                 })
                 total += len((txns or {}).get("transactions", []))
             except Exception as e:
-                print(f"Error fetching {bank_key}/{uid}: {e}")
+                errors.append(f"{bank_name} ({uid[:8]}): {e}")
 
         if accounts_data:
             result["banks"][bank_key] = {
@@ -59,6 +60,8 @@ def fetch_bank_transactions(
             }
 
     result["total_transactions"] = total
+    if errors:
+        result["errors"] = errors
     return result
 
 
