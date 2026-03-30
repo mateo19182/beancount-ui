@@ -15,6 +15,7 @@ def run():
 
     # Import pages to register @ui.page routes
     import pages.overview
+    import pages.charts
     import pages.investments
     import pages.crypto
     import pages.transactions

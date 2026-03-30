@@ -16,6 +16,7 @@ def page_layout(title: str):
 
         with ui.row().classes("gap-1"):
             _nav_button("Overview", "/")
+            _nav_button("Charts", "/charts")
             _nav_button("Investments", "/investments")
             _nav_button("Crypto", "/crypto")
             _nav_button("Transactions", "/transactions")
@@ -23,6 +24,7 @@ def page_layout(title: str):
             _nav_button("Import", "/import")
 
         with ui.row().classes("items-center"):
+
             async def on_reload():
                 if state.ledger:
                     state.ledger.reload()
