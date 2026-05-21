@@ -1,0 +1,17 @@
+# Copy to config.toml in the project root and edit (config.toml is gitignored).
+
+ledger_path = "/path/to/main.beancount"
+port = 8742
+
+[enable_banking]
+enabled = true
+app_id = "your-app-id"
+key_path = "/path/to/enable-banking-private.pem"
+
+[enable_banking.banks.revolut]
+name = "Revolut"
+country = "ES"
+
+# [enable_banking.banks.another_bank]
+# name = "Bank Name"
+# country = "ES"

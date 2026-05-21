@@ -4,3 +4,12 @@ __pycache__/
 .nicegui/
 .import-cache/
 *.pem
+
+# Local config with secrets (use config.toml.example)
+config.toml
+
+# Build artifacts
+frontend/node_modules/
+frontend/dist/
+src-tauri/target/
+backend/.venv/
