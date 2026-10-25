@@ -80,6 +80,15 @@ def auth_complete(body: AuthCompleteRequest):
     cfg = _require_banking()
     cache_dir = state.config.cache_dir
     code = body.code.strip()
+    if "error=" in code and "code=" not in code:
+        from urllib.parse import parse_qs, urlparse
+
+        params = parse_qs(urlparse(code).query)
+        err = params.get("error", [""])[0]
+        desc = params.get("error_description", [""])[0].replace("+", " ")
+        from urllib.parse import unquote
+        msg = unquote(desc) or f"Authorization rejected (error={err})"
+        raise HTTPException(400, f"Bank rejected authorization: {msg}")
     if "code=" in code:
         code = code.split("code=")[1].split("&")[0]
     session = complete_session(cfg.app_id, cfg.key_path, code, body.bank_key, cache_dir)

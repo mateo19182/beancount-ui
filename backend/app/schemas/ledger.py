@@ -19,6 +19,11 @@ class PriceUpdateResponse(BaseModel):
     message: str
 
 
+class LedgerReloadResponse(BaseModel):
+    valid: bool
+    message: str
+
+
 class LedgerStatus(BaseModel):
     loaded: bool
     ledger_path: str | None = None

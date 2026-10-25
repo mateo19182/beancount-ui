@@ -35,6 +35,7 @@ def get_all_transactions(
                 posting_amounts.append({
                     "amount": abs(amount),
                     "currency": posting.units.currency,
+                    "signed": float(amount),
                     "direction": "+" if amount > 0 else "-",
                 })
 

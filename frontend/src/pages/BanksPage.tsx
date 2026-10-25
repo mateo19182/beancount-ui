@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
+import { PageHeader } from '@/components/PageHeader'
+import { LoadingState } from '@/components/LoadingState'
+import { MetricCard } from '@/components/charts/MetricCard'
+import { ChartShell } from '@/components/charts/ChartShell'
+import { CategoryBars } from '@/components/charts/CategoryBars'
+import { DataTable, DataTableHead, DataTableRow, Th, Td } from '@/components/DataTable'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/utils'
+import { FormattedMoney, Money } from '@/lib/privacy-blur'
+import { cn } from '@/lib/utils'
 
 export function BanksPage() {
   const [tab, setTab] = useState<'balances' | 'files'>('balances')
@@ -20,92 +28,128 @@ export function BanksPage() {
     enabled: !!selectedFile,
   })
 
+  const barData =
+    balances?.accounts.map((a) => ({ name: a.account.split(':').pop() ?? a.account, total: a.value })) ?? []
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Banks</h1>
-      <div className="flex gap-2">
-        <Button variant={tab === 'balances' ? 'default' : 'outline'} onClick={() => setTab('balances')}>
-          Balances
-        </Button>
-        <Button variant={tab === 'files' ? 'default' : 'outline'} onClick={() => setTab('files')}>
-          Import files
-        </Button>
+    <div className="space-y-8">
+      <PageHeader title="Banks" description="Cash accounts and import files" />
+
+      <div className="inline-flex rounded-lg border border-[var(--color-border)] p-1">
+        {(['balances', 'files'] as const).map((t) => (
+          <Button
+            key={t}
+            variant="ghost"
+            size="sm"
+            className={cn(
+              tab === t && 'bg-[var(--color-accent-glow)] text-[var(--color-accent)]'
+            )}
+            onClick={() => setTab(t)}
+          >
+            {t === 'balances' ? 'Balances' : 'Import files'}
+          </Button>
+        ))}
       </div>
 
       {tab === 'balances' && (
         <>
-          {balLoading && <p>Loading...</p>}
-          {balError && <p className="text-red-600">{String(balError)}</p>}
+          {balLoading && <LoadingState rows={1} />}
+          {balError && <p className="text-[var(--color-expense)]">{String(balError)}</p>}
           {balances && (
-            <>
-              <Card>
-                <CardTitle>Total Bank Balance</CardTitle>
-                <p className="mt-2 text-2xl font-bold">
-                  {formatMoney(balances.total, balances.currency)}
-                </p>
-              </Card>
-              <Card>
-                <CardTitle>Accounts</CardTitle>
-                <table className="mt-4 w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left">
-                      <th>Account</th>
-                      <th className="text-right">Value</th>
-                    </tr>
-                  </thead>
+            <div className="space-y-6">
+              <MetricCard
+                label="Total cash"
+                value={formatMoney(balances.total, balances.currency)}
+                accent="accent"
+              />
+
+              {barData.length > 0 && (
+                <ChartShell title="By account" height="h-64">
+                  <CategoryBars
+                    data={barData}
+                    currency={balances.currency}
+                    layout="horizontal"
+                  />
+                </ChartShell>
+              )}
+
+              <ChartShell title="Account details" height="h-auto">
+                <DataTable>
+                  <DataTableHead>
+                    <Th>Account</Th>
+                    <Th align="right">Balance</Th>
+                  </DataTableHead>
                   <tbody>
                     {balances.accounts.map((acc) => (
-                      <tr key={acc.account} className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="py-2">
-                          <details>
-                            <summary className="cursor-pointer">{acc.account}</summary>
-                            <ul className="mt-1 text-xs text-gray-500">
+                      <DataTableRow key={acc.account}>
+                        <Td>
+                          <details className="group">
+                            <summary className="cursor-pointer list-none font-medium text-[var(--color-fg)]">
+                              {acc.account}
+                              <span className="ml-2 text-xs text-[var(--color-fg-subtle)]">
+                                ({acc.positions.length} currencies)
+                              </span>
+                            </summary>
+                            <ul className="mt-2 space-y-1 border-l border-[var(--color-border)] pl-3 text-xs text-[var(--color-fg-muted)]">
                               {acc.positions.map((p) => (
                                 <li key={p.currency}>
-                                  {p.amount.toLocaleString()} {p.currency} (
-                                  {formatMoney(p.value, balances.currency)})
+                                  <Money>
+                                    {p.amount.toLocaleString()} {p.currency}
+                                  </Money>{' '}
+                                  → <FormattedMoney value={p.value} currency={balances.currency} />
                                 </li>
                               ))}
                             </ul>
                           </details>
-                        </td>
-                        <td className="py-2 text-right">
-                          {formatMoney(acc.value, balances.currency)}
-                        </td>
-                      </tr>
+                        </Td>
+                        <Td align="right">
+                          <FormattedMoney value={acc.value} currency={balances.currency} />
+                        </Td>
+                      </DataTableRow>
                     ))}
                   </tbody>
-                </table>
-              </Card>
-            </>
+                </DataTable>
+              </ChartShell>
+            </div>
           )}
         </>
       )}
 
       {tab === 'files' && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardTitle>Bank transaction files</CardTitle>
-            <ul className="mt-4 space-y-1 text-sm">
+            <ul className="mt-4 space-y-2">
               {(files?.files ?? []).map((f) => (
                 <li key={f.path}>
                   <button
                     type="button"
-                    className="text-blue-600 hover:underline dark:text-blue-400"
+                    className={cn(
+                      'w-full rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                      selectedFile === f.path
+                        ? 'bg-[var(--color-accent-glow)] text-[var(--color-accent)]'
+                        : 'hover:bg-[var(--color-surface-overlay)] text-[var(--color-fg)]'
+                    )}
                     onClick={() => setSelectedFile(f.path)}
                   >
                     {f.name}
+                    <span className="ml-2 text-[var(--color-fg-subtle)]">
+                      {(f.size_bytes / 1024).toFixed(1)} KB
+                    </span>
                   </button>
-                  <span className="text-gray-500"> ({(f.size_bytes / 1024).toFixed(1)} KB)</span>
                 </li>
               ))}
             </ul>
-            {!files?.files?.length && <p className="mt-4 text-gray-500">No bank files found.</p>}
+            {!files?.files?.length && (
+              <p className="mt-4 text-sm text-[var(--color-fg-muted)]">No bank files found.</p>
+            )}
           </Card>
           {selectedFile && fileContent && (
             <Card>
-              <CardTitle>{fileContent.path}</CardTitle>
-              <pre className="mt-2 max-h-96 overflow-auto text-xs">{fileContent.content}</pre>
+              <CardTitle>{fileContent.path.split('/').pop()}</CardTitle>
+              <pre className="mt-4 max-h-[28rem] overflow-auto rounded-lg bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-fg-muted)]">
+                {fileContent.content}
+              </pre>
             </Card>
           )}
         </div>

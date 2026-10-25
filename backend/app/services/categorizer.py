@@ -49,10 +49,13 @@ def suggest_account(
 
 
 def get_all_expense_income_accounts(entries) -> list[str]:
-    """Get all unique expense/income accounts from the ledger."""
+    """Get all unique expense/income accounts from the ledger (open + used)."""
     accounts = set()
     for entry in entries:
-        if isinstance(entry, data.Transaction):
+        if isinstance(entry, data.Open):
+            if entry.account.startswith(("Expenses:", "Income:")):
+                accounts.add(entry.account)
+        elif isinstance(entry, data.Transaction):
             for posting in entry.postings:
                 if posting.account.startswith(("Expenses:", "Income:")):
                     accounts.add(posting.account)

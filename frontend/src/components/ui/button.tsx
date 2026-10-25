@@ -4,17 +4,20 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-40',
   {
     variants: {
       variant: {
-        default: 'bg-blue-600 text-white hover:bg-blue-700',
-        outline: 'border border-gray-300 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800',
-        ghost: 'hover:bg-gray-100 dark:hover:bg-gray-800',
-        destructive: 'bg-red-600 text-white hover:bg-red-700',
+        default:
+          'bg-[var(--color-accent)] text-[#0c0e12] hover:bg-[var(--color-accent-dim)] shadow-[0_0_20px_var(--color-accent-glow)]',
+        outline:
+          'border border-[var(--color-border)] bg-transparent text-[var(--color-fg)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-glow)]',
+        ghost: 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-fg)]',
+        destructive: 'bg-[var(--color-expense)] text-white hover:opacity-90',
+        subtle: 'bg-[var(--color-surface-overlay)] text-[var(--color-fg)] hover:bg-[var(--color-border)]',
       },
       size: {
-        default: 'h-9 px-4 py-2',
+        default: 'h-9 px-4',
         sm: 'h-8 px-3 text-xs',
         icon: 'h-9 w-9',
       },

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Outlet } from 'react-router-dom'
+import { FileText, FolderOpen } from 'lucide-react'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 
 async function pickLedgerFile(): Promise<string | null> {
   try {
@@ -24,7 +26,8 @@ export function LedgerGate() {
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ['health'],
     queryFn: api.health,
-    refetchInterval: 2000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     retry: 10,
   })
 
@@ -50,8 +53,9 @@ export function LedgerGate() {
 
   if (healthLoading || !health) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Starting backend...</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+        <Skeleton className="h-12 w-12 rounded-xl" />
+        <p className="text-sm text-[var(--color-fg-muted)]">Starting backend...</p>
       </div>
     )
   }
@@ -59,20 +63,23 @@ export function LedgerGate() {
   if (!status?.loaded) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="max-w-lg w-full">
-          <CardTitle>Open ledger</CardTitle>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Copy config.toml.example to config.toml and set ledger_path, or open a file below.
+        <Card className="w-full max-w-md">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-accent-glow)]">
+            <FileText className="h-6 w-6 text-[var(--color-accent)]" />
+          </div>
+          <CardTitle>Open your ledger</CardTitle>
+          <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
+            Set ledger_path in config.toml, or choose a .beancount file below.
           </p>
-          <div className="mt-4 flex flex-col gap-2">
+          <div className="mt-6 flex flex-col gap-3">
             <Input
               placeholder="/path/to/main.beancount"
               value={path}
               onChange={(e) => setPath(e.target.value)}
             />
             <div className="flex gap-2">
-              <Button disabled={!path || opening} onClick={() => openLedger(path)}>
-                Open
+              <Button className="flex-1" disabled={!path || opening} onClick={() => openLedger(path)}>
+                Open ledger
               </Button>
               <Button
                 variant="outline"
@@ -85,10 +92,10 @@ export function LedgerGate() {
                   }
                 }}
               >
-                Browse...
+                <FolderOpen className="h-4 w-4" />
               </Button>
             </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <p className="text-sm text-[var(--color-expense)]">{error}</p>}
           </div>
         </Card>
       </div>

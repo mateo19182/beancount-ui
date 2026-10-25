@@ -18,7 +18,8 @@ export interface PostingInput {
   account: string
   amount: number
   currency: string
-  direction: string
+  signed?: number
+  direction?: string
 }
 
 export interface TransactionRow {
@@ -29,7 +30,7 @@ export interface TransactionRow {
   narration: string
   amount_str: string
   accounts: string[]
-  posting_amounts: { amount: number; currency: string; direction: string }[]
+  posting_amounts: { amount: number; currency: string; signed: number; direction: string }[]
   has_document: boolean
   document_path: string | null
 }
@@ -82,6 +83,21 @@ export interface BankingStatus {
   banks: { key: string; name: string; authorized: boolean; accounts: number }[]
 }
 
+export interface ChartBreakdownCategory {
+  name: string
+  total: number
+  account?: string
+  subcategories?: { name: string; total: number; account?: string }[]
+}
+
+export interface ChartBreakdownResponse {
+  from: string
+  to: string
+  kind: string
+  currency: string
+  categories: ChartBreakdownCategory[]
+}
+
 export interface StagedTxn {
   id: string
   date: string
@@ -94,7 +110,9 @@ export interface StagedTxn {
   bank_key: string
   status: string
   duplicate?: string
-  direction?: string
+  flow?: 'in' | 'out'
+  flow_conflict?: boolean
+  flow_manual?: boolean
   imported?: boolean
   discarded?: boolean
 }

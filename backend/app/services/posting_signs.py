@@ -3,9 +3,11 @@
 
 def signed_amount(posting: dict, postings: list[dict]) -> float:
     """Compute the signed amount for a single posting."""
+    if posting.get("signed") is not None:
+        return float(posting["signed"])
+
     account = posting["account"]
-    amount = posting["amount"]
-    currency = posting["currency"]
+    amount = abs(posting["amount"])
     direction = posting.get("direction", "auto")
     is_bank_account = "Bank" in account or account.startswith("Assets:")
 
@@ -13,19 +15,17 @@ def signed_amount(posting: dict, postings: list[dict]) -> float:
     has_income = any(p["account"].startswith("Income:") for p in postings)
 
     if is_bank_account and direction == "reverse":
-        return abs(amount)
-    if is_bank_account and direction == "normal":
-        return -abs(amount)
-    if amount < 0:
         return amount
+    if is_bank_account and direction == "normal":
+        return -amount
     if account.startswith("Expenses:"):
-        return abs(amount)
+        return amount
     if account.startswith("Income:"):
-        return -abs(amount)
+        return -amount
     if has_expense:
-        return -abs(amount)
+        return -amount
     if has_income:
-        return abs(amount)
+        return amount
     return amount
 
 

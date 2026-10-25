@@ -46,6 +46,18 @@ def load_sessions(cache_dir: Path) -> dict[str, dict]:
     return {}
 
 
+def is_session_expired(session: dict) -> bool:
+    """Return True if the session's access token has passed valid_until."""
+    valid_until = (session.get("access") or {}).get("valid_until")
+    if not valid_until:
+        return False
+    try:
+        exp = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    return datetime.now(timezone.utc) > exp
+
+
 def save_sessions(cache_dir: Path, sessions: dict):
     f = get_sessions_file(cache_dir)
     f.write_text(json.dumps(sessions, indent=2))

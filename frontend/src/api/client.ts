@@ -1,6 +1,7 @@
 import type {
   BankBalances,
   BankingStatus,
+  ChartBreakdownResponse,
   LedgerMeta,
   LedgerStatus,
   OverviewData,
@@ -42,19 +43,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
-  reload: () => request('/api/ledger/reload', { method: 'POST' }),
-  validate: () => request<{ valid: boolean; message: string }>('/api/ledger/validate', { method: 'POST' }),
-  updatePrices: () =>
-    request<{ success: boolean; message: string }>('/api/ledger/prices', { method: 'POST' }),
+  createAccount: (body: { account: string; date?: string; currencies?: string[] }) =>
+    request<{ success: boolean; message: string; account: string }>('/api/ledger/accounts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  reload: () =>
+    request<{ valid: boolean; message: string }>('/api/ledger/reload', { method: 'POST' }),
   overview: () => request<OverviewData>('/api/overview'),
   chartsMonths: () => request<{ months: { year: number; month: number }[] }>('/api/charts/months'),
-  chartsIncomeExpenses: (year: number, month: number) =>
-    request<{ income: number; expenses: number; net: number; currency: string }>(
-      `/api/charts/income-expenses?year=${year}&month=${month}`
+  chartsIncomeExpenses: (dateFrom: string, dateTo: string) =>
+    request<{ from: string; to: string; income: number; expenses: number; currency: string }>(
+      `/api/charts/income-expenses?date_from=${dateFrom}&date_to=${dateTo}`
     ),
-  chartsBreakdown: (year: number, month: number, kind: string) =>
-    request<{ categories: { name: string; total: number }[]; currency: string }>(
-      `/api/charts/breakdown?year=${year}&month=${month}&kind=${kind}`
+  chartsTrend: (dateFrom: string, dateTo: string) =>
+    request<{
+      from: string
+      to: string
+      currency: string
+      months: { year: number; month: number; income: number; expenses: number }[]
+    }>(`/api/charts/trend?date_from=${dateFrom}&date_to=${dateTo}`),
+  chartsBreakdown: (dateFrom: string, dateTo: string, kind: string) =>
+    request<ChartBreakdownResponse>(
+      `/api/charts/breakdown?date_from=${dateFrom}&date_to=${dateTo}&kind=${kind}`
     ),
   investments: () => request<PositionsResponse>('/api/investments'),
   crypto: () => request<PositionsResponse>('/api/crypto'),
@@ -85,7 +96,7 @@ export const api = {
       body: JSON.stringify({ bank_key }),
     }),
   bankingAuthComplete: (bank_key: string, code: string) =>
-    request('/api/banking/auth/complete', {
+    request<{ success: boolean; accounts: number }>('/api/banking/auth/complete', {
       method: 'POST',
       body: JSON.stringify({ bank_key, code }),
     }),
@@ -105,7 +116,11 @@ export const api = {
       body: JSON.stringify({ transactions }),
     }),
   bankingImport: (body: object) =>
-    request<{ success_count: number; error_count: number }>('/api/banking/import', {
+    request<{
+      success_count: number
+      error_count: number
+      balance_errors?: string[]
+    }>('/api/banking/import', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

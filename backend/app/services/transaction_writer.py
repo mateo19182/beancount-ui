@@ -1,10 +1,15 @@
 """Format, validate, and write beancount transactions."""
 
+import re
 from pathlib import Path
+
 from beancount import loader
 
 from app.services.posting_signs import balance_by_currency, is_balanced, signed_amount
 from app.services.transaction_ids import parse_transaction_id
+
+VALID_ACCOUNT_ROOTS = ("Assets", "Liabilities", "Equity", "Income", "Expenses")
+_ACCOUNT_PART_RE = re.compile(r"^[A-Z][A-Za-z0-9\-_]*$")
 
 
 def _escape_quotes(s: str) -> str:
@@ -86,6 +91,29 @@ def write_transaction(transaction_str: str, target_file: Path) -> tuple[bool, st
         f.write("\n")
         f.write(transaction_str)
     return True, f"Transaction written to {target_file.name}"
+
+
+def is_valid_account_name(account: str) -> bool:
+    if not account or ":" not in account:
+        return False
+    parts = account.split(":")
+    if parts[0] not in VALID_ACCOUNT_ROOTS:
+        return False
+    return all(_ACCOUNT_PART_RE.match(p) for p in parts)
+
+
+def format_open_directive(date: str, account: str, currencies: list[str] | None = None) -> str:
+    line = f"{date} open {account}"
+    if currencies:
+        line += " " + ", ".join(f'"{c}"' for c in currencies)
+    return line + "\n"
+
+
+def write_open_directive(directive: str, ledger_path: Path) -> tuple[bool, str]:
+    with open(ledger_path, "a") as f:
+        f.write("\n")
+        f.write(directive)
+    return True, f"Account opened in {ledger_path.name}"
 
 
 def verify_ledger(ledger_path: Path) -> tuple[bool, str]:
@@ -173,11 +201,12 @@ def _parse_block_at_line(lines: list[str], tx_start: int) -> tuple[dict, list[di
             parts = s.split()
             if len(parts) >= 3:
                 try:
+                    raw = float(parts[1].replace(",", ""))
                     postings.append({
                         "account": parts[0],
-                        "amount": abs(float(parts[1].replace(",", ""))),
+                        "amount": abs(raw),
                         "currency": parts[2],
-                        "direction": "auto",
+                        "signed": raw,
                     })
                 except ValueError:
                     warnings.append(f"Could not parse posting: {s}")
@@ -375,10 +404,12 @@ def _parse_transaction_block(
             parts = s.split()
             if len(parts) >= 3:
                 try:
+                    raw = float(parts[1].replace(",", ""))
                     postings.append({
                         "account": parts[0],
-                        "amount": float(parts[1].replace(",", "")),
+                        "amount": abs(raw),
                         "currency": parts[2],
+                        "signed": raw,
                     })
                 except ValueError:
                     warnings.append(f"Could not parse posting: {s}")

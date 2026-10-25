@@ -1,94 +1,183 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '@/api/client'
-import { Card, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/PageHeader'
+import { LoadingState } from '@/components/LoadingState'
+import { DateRangeFilter } from '@/components/DateRangeFilter'
+import { ChartShell } from '@/components/charts/ChartShell'
+import { MetricCard } from '@/components/charts/MetricCard'
+import {
+  IncomeExpenseBar,
+  CashflowTrend,
+  NetSavingsArea,
+} from '@/components/charts/IncomeExpenseCharts'
+import { CategoryBreakdownChart } from '@/components/charts/CategoryBreakdownChart'
+import { Badge } from '@/components/ui/badge'
+import {
+  type DateRange,
+  formatRangeLabel,
+  ledgerBounds,
+  presetRange,
+  type RangePresetId,
+} from '@/lib/dateRange'
+import { formatMoney } from '@/lib/utils'
+import { FormattedMoney } from '@/lib/privacy-blur'
 
 export function ChartsPage() {
   const navigate = useNavigate()
-  const { data: monthsData } = useQuery({ queryKey: ['charts-months'], queryFn: api.chartsMonths })
+  const { data: monthsData, isLoading: monthsLoading } = useQuery({
+    queryKey: ['charts-months'],
+    queryFn: api.chartsMonths,
+  })
   const months = monthsData?.months ?? []
-  const latest = months[months.length - 1]
-  const [year, setYear] = useState(latest?.year ?? new Date().getFullYear())
-  const [month, setMonth] = useState(latest?.month ?? new Date().getMonth() + 1)
 
-  const { data: ie } = useQuery({
-    queryKey: ['charts-ie', year, month],
-    queryFn: () => api.chartsIncomeExpenses(year, month),
+  const [range, setRange] = useState<DateRange | null>(null)
+  const [preset, setPreset] = useState<RangePresetId | null>('month')
+
+  useEffect(() => {
+    if (months.length > 0 && !range) {
+      const initial = presetRange('month', months) ?? ledgerBounds(months)
+      if (initial) setRange(initial)
+    }
+  }, [months, range])
+
+  const from = range?.from ?? ''
+  const to = range?.to ?? ''
+
+  const { data: ie, isLoading: ieLoading } = useQuery({
+    queryKey: ['charts-ie', from, to],
+    queryFn: () => api.chartsIncomeExpenses(from, to),
+    enabled: Boolean(from && to),
   })
+
+  const { data: trendData, isLoading: trendLoading } = useQuery({
+    queryKey: ['charts-trend', from, to],
+    queryFn: () => api.chartsTrend(from, to),
+    enabled: Boolean(from && to),
+  })
+
   const { data: expenses } = useQuery({
-    queryKey: ['charts-exp', year, month],
-    queryFn: () => api.chartsBreakdown(year, month, 'expenses'),
+    queryKey: ['charts-exp', from, to],
+    queryFn: () => api.chartsBreakdown(from, to, 'expenses'),
+    enabled: Boolean(from && to),
   })
+
   const { data: income } = useQuery({
-    queryKey: ['charts-inc', year, month],
-    queryFn: () => api.chartsBreakdown(year, month, 'income'),
+    queryKey: ['charts-inc', from, to],
+    queryFn: () => api.chartsBreakdown(from, to, 'income'),
+    enabled: Boolean(from && to),
   })
 
-  const barData = useMemo(
-    () =>
-      ie
-        ? [
-            { name: 'Income', value: ie.income },
-            { name: 'Expenses', value: ie.expenses },
-          ]
-        : [],
-    [ie]
-  )
+  const trend = trendData?.months ?? []
+  const net = ie ? ie.income - ie.expenses : 0
+  const savingsRate = ie && ie.income > 0 ? ((ie.income - ie.expenses) / ie.income) * 100 : 0
+  const rangeLabel = range ? formatRangeLabel(range) : ''
+  const currency = ie?.currency ?? expenses?.currency ?? 'EUR'
 
-  const monthStr = `${year}-${String(month).padStart(2, '0')}`
+  if (monthsLoading || !range) return <LoadingState />
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Charts</h1>
-      <div className="flex flex-wrap gap-2">
-        {months.map((m) => (
-          <Button
-            key={`${m.year}-${m.month}`}
-            variant={m.year === year && m.month === month ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => {
-              setYear(m.year)
-              setMonth(m.month)
-            }}
-          >
-            {m.year}-{String(m.month).padStart(2, '0')}
-          </Button>
-        ))}
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Analytics"
+        description="Income, expenses, and category breakdowns over time"
+      />
 
-      <Card>
-        <CardTitle>Income vs Expenses ({year}-{month})</CardTitle>
-        <div className="h-64 mt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={barData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="value" fill="#1a73e8" />
-            </BarChart>
-          </ResponsiveContainer>
+      <DateRangeFilter
+        range={range}
+        onChange={setRange}
+        months={months}
+        activePreset={preset}
+        onPresetChange={setPreset}
+      />
+
+      {ie && !ieLoading && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard
+            label="Income"
+            value={formatMoney(ie.income, currency)}
+            accent="income"
+          />
+          <MetricCard
+            label="Expenses"
+            value={formatMoney(ie.expenses, currency)}
+            accent="expense"
+          />
+          <MetricCard
+            label="Net"
+            value={formatMoney(net, currency)}
+            accent={net >= 0 ? 'accent' : 'expense'}
+            sub={net >= 0 ? 'Saved in period' : 'Deficit in period'}
+          />
+          <MetricCard
+            label="Savings rate"
+            value={`${savingsRate.toFixed(1)}%`}
+            accent={savingsRate >= 20 ? 'income' : savingsRate >= 0 ? 'default' : 'expense'}
+            progress={Math.max(0, Math.min(100, savingsRate))}
+          />
         </div>
-      </Card>
+      )}
+
+      {trend.length > 1 && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ChartShell
+            title="Cashflow trend"
+            subtitle={`${rangeLabel} — income, expenses, net`}
+            height="h-auto"
+          >
+            {trendLoading ? (
+              <p className="text-sm text-[var(--color-fg-muted)]">Loading trend...</p>
+            ) : (
+              <CashflowTrend data={trend} currency={currency} />
+            )}
+          </ChartShell>
+          <ChartShell title="Net savings" subtitle={`${rangeLabel} — monthly surplus or deficit`} height="h-auto">
+            {trendLoading ? (
+              <p className="text-sm text-[var(--color-fg-muted)]">Loading...</p>
+            ) : (
+              <NetSavingsArea data={trend} currency={currency} />
+            )}
+          </ChartShell>
+        </div>
+      )}
+
+      {ie && (
+        <ChartShell
+          title={`${rangeLabel} overview`}
+          subtitle="Income vs expenses vs net for selected period"
+          height="h-auto"
+        >
+          <IncomeExpenseBar income={ie.income} expenses={ie.expenses} currency={currency} />
+        </ChartShell>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <BreakdownCard
+        <BreakdownPanel
           title="Expenses"
+          kind="expense"
           data={expenses?.categories ?? []}
           currency={expenses?.currency}
-          onSelect={(name) =>
-            navigate(`/transactions?month=${monthStr}&search=${encodeURIComponent(name)}`)
+          dateFrom={from}
+          dateTo={to}
+          onSelect={(search) =>
+            navigate(
+              `/transactions?date_from=${from}&date_to=${to}&search=${encodeURIComponent(search)}`
+            )
           }
         />
-        <BreakdownCard
+        <BreakdownPanel
           title="Income"
+          kind="income"
           data={income?.categories ?? []}
           currency={income?.currency}
-          onSelect={(name) =>
-            navigate(`/transactions?month=${monthStr}&search=${encodeURIComponent(name)}`)
+          colorOffset={4}
+          dateFrom={from}
+          dateTo={to}
+          onSelect={(search) =>
+            navigate(
+              `/transactions?date_from=${from}&date_to=${to}&search=${encodeURIComponent(search)}`
+            )
           }
         />
       </div>
@@ -96,51 +185,55 @@ export function ChartsPage() {
   )
 }
 
-function BreakdownCard({
+function BreakdownPanel({
   title,
+  kind,
   data,
   currency,
+  colorOffset = 0,
+  dateFrom,
+  dateTo,
   onSelect,
 }: {
   title: string
-  data: { name: string; total: number }[]
+  kind: 'income' | 'expense'
+  data: {
+    name: string
+    total: number
+    account?: string
+    subcategories?: { name: string; total: number; account?: string }[]
+  }[]
   currency?: string
-  onSelect: (name: string) => void
+  colorOffset?: number
+  dateFrom: string
+  dateTo: string
+  onSelect: (search: string) => void
 }) {
+  const total = data.reduce((s, c) => s + c.total, 0)
+  const subCount = data.reduce((s, c) => s + (c.subcategories?.length ?? 0), 0)
+
   return (
-    <Card>
-      <CardTitle>{title}</CardTitle>
-      <div className="h-64 mt-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
-            <YAxis type="category" dataKey="name" width={120} />
-            <Tooltip formatter={(v: number) => `${v.toLocaleString()} ${currency ?? ''}`} />
-            <Bar
-              dataKey="total"
-              fill="#34a853"
-              onClick={(row) => onSelect(row.name)}
-              style={{ cursor: 'pointer' }}
-            />
-          </BarChart>
-        </ResponsiveContainer>
+    <ChartShell
+      title={title}
+      subtitle={
+        <>
+          {data.length} categories · {subCount} subcategories ·{' '}
+          <FormattedMoney value={total} currency={currency ?? ''} />
+        </>
+      }
+      height="h-auto"
+    >
+      <CategoryBreakdownChart
+        categories={data}
+        currency={currency ?? ''}
+        colorIndex={colorOffset}
+        onSelect={onSelect}
+      />
+      <div className="mt-3">
+        <Badge variant={kind === 'income' ? 'income' : 'expense'}>
+          Click a bar to filter transactions ({dateFrom} – {dateTo})
+        </Badge>
       </div>
-      <ul className="mt-2 text-sm">
-        {data.map((c) => (
-          <li key={c.name}>
-            <button
-              type="button"
-              className="text-blue-600 hover:underline dark:text-blue-400"
-              onClick={() => onSelect(c.name)}
-            >
-              {c.name}
-            </button>
-            {' — '}
-            {c.total.toLocaleString()} {currency}
-          </li>
-        ))}
-      </ul>
-    </Card>
+    </ChartShell>
   )
 }

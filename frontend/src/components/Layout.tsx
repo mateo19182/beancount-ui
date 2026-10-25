@@ -1,23 +1,40 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  LayoutDashboard,
+  BarChart3,
+  TrendingUp,
+  Bitcoin,
+  Landmark,
+  List,
+  PlusCircle,
+  Download,
+  RefreshCw,
+  Sparkles,
+  EyeOff,
+  Eye,
+} from 'lucide-react'
 import { api } from '@/api/client'
+import { usePrivacyBlur } from '@/lib/privacy-blur'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 const NAV = [
-  ['/', 'Overview'],
-  ['/charts', 'Charts'],
-  ['/investments', 'Investments'],
-  ['/crypto', 'Crypto'],
-  ['/banks', 'Banks'],
-  ['/transactions', 'Transactions'],
-  ['/add', 'Add'],
-  ['/import', 'Import'],
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/charts', label: 'Analytics', icon: BarChart3 },
+  { path: '/investments', label: 'Investments', icon: TrendingUp },
+  { path: '/crypto', label: 'Crypto', icon: Bitcoin },
+  { path: '/banks', label: 'Banks', icon: Landmark },
+  { path: '/transactions', label: 'Transactions', icon: List },
+  { path: '/add', label: 'New entry', icon: PlusCircle },
+  { path: '/import', label: 'Import', icon: Download },
 ]
 
 export function Layout() {
   const location = useLocation()
   const qc = useQueryClient()
+  const { blurAmounts, toggleBlurAmounts } = usePrivacyBlur()
   const { data: meta } = useQuery({
     queryKey: ['ledger-meta'],
     queryFn: api.ledgerMeta,
@@ -29,85 +46,99 @@ export function Layout() {
     onSuccess: () => qc.invalidateQueries(),
   })
 
-  const validate = useMutation({ mutationFn: api.validate })
-  const prices = useMutation({
-    mutationFn: api.updatePrices,
-    onSuccess: () => qc.invalidateQueries(),
-  })
+  const ledgerName = meta?.ledger_path?.split('/').pop() ?? 'Ledger'
+  const statusMsg = reload.data?.message
+  const statusOk = reload.data?.valid
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-gray-200 bg-blue-600 text-white dark:border-gray-800">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <span className="text-lg font-bold">Beancount</span>
-          <nav className="flex flex-wrap gap-1">
-            {NAV.map(([path, label]) => (
+    <div className="flex min-h-screen">
+      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]">
+        <div className="border-b border-[var(--color-border-subtle)] px-4 py-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-accent-glow)]">
+              <Sparkles className="h-4 w-4 text-[var(--color-accent)]" />
+            </div>
+            <div>
+              <p className="text-sm font-bold tracking-tight">Ledger</p>
+              <p className="truncate text-[10px] text-[var(--color-fg-subtle)]" title={meta?.ledger_path}>
+                {ledgerName}
+              </p>
+            </div>
+          </div>
+          {meta && (
+            <div className="mt-3 flex flex-wrap gap-1">
+              <Badge variant="accent">{meta.base_currency}</Badge>
+              {meta.error_count > 0 && (
+                <Badge variant="expense">{meta.error_count} errors</Badge>
+              )}
+            </div>
+          )}
+        </div>
+
+        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+          {NAV.map(({ path, label, icon: Icon }) => {
+            const active = location.pathname === path
+            return (
               <Link
                 key={path}
                 to={path}
                 className={cn(
-                  'rounded px-3 py-1 text-sm no-underline hover:bg-white/20',
-                  location.pathname === path && 'bg-white/20'
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm no-underline transition-colors',
+                  active
+                    ? 'bg-[var(--color-accent-glow)] font-medium text-[var(--color-accent)]'
+                    : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-fg)]'
                 )}
               >
+                <Icon className="h-4 w-4 shrink-0 opacity-80" />
                 {label}
               </Link>
-            ))}
-          </nav>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20"
-              onClick={() => prices.mutate()}
-              disabled={prices.isPending}
-            >
-              Prices
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20"
-              onClick={() => validate.mutate()}
-              disabled={validate.isPending}
-            >
-              Validate
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20"
-              onClick={() => reload.mutate()}
-              disabled={reload.isPending}
-            >
-              Reload
-            </Button>
-          </div>
+            )
+          })}
+        </nav>
+
+        <div className="border-t border-[var(--color-border-subtle)] p-3 space-y-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={toggleBlurAmounts}
+            aria-pressed={blurAmounts}
+          >
+            {blurAmounts ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            {blurAmounts ? 'Show amounts' : 'Blur amounts'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => reload.mutate()}
+            disabled={reload.isPending}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', reload.isPending && 'animate-spin')} />
+            Reload
+          </Button>
         </div>
-        {meta && (
-          <div className="border-t border-white/20 px-4 py-1 text-xs opacity-80">
-            {meta.ledger_path} · {meta.base_currency}
-            {meta.error_count > 0 && ` · ${meta.error_count} errors`}
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {statusMsg && (
+          <div
+            className={cn(
+              'border-b px-6 py-2 text-xs',
+              statusOk
+                ? 'border-emerald-500/20 bg-emerald-500/10 text-[var(--color-income)]'
+                : 'border-rose-500/20 bg-rose-500/10 text-[var(--color-expense)]'
+            )}
+          >
+            {statusMsg}
           </div>
         )}
-        {(validate.data || prices.data) && (
-          <div className="px-4 py-1 text-xs">
-            {validate.data && (
-              <span className={validate.data.valid ? 'text-green-200' : 'text-red-200'}>
-                {validate.data.message}{' '}
-              </span>
-            )}
-            {prices.data && (
-              <span className={prices.data.success ? 'text-green-200' : 'text-red-200'}>
-                {prices.data.message}
-              </span>
-            )}
+        <main className="flex-1 p-6 lg:p-8">
+          <div className="mx-auto max-w-6xl">
+            <Outlet />
           </div>
-        )}
-      </header>
-      <main className="mx-auto max-w-7xl p-6">
-        <Outlet />
-      </main>
+        </main>
+      </div>
     </div>
   )
 }

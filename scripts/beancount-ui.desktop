@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=0.2.0
+Type=Application
+Name=beancount-ui
+GenericName=Beancount Ledger
+Comment=Beancount ledger manager
+Exec=uwsm-app -- beancount-ui-launch
+Icon=beancount
+Terminal=false
+Categories=Finance;Office;
+StartupNotify=true
+StartupWMClass=beancount-ui

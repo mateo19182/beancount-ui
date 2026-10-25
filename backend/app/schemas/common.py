@@ -10,6 +10,7 @@ class PostingInput(BaseModel):
     account: str
     amount: float
     currency: str
+    signed: float | None = None
     direction: str = "auto"
 
 
@@ -37,3 +38,15 @@ class TransactionDelete(BaseModel):
 
 class LedgerOpenRequest(BaseModel):
     path: str
+
+
+class AccountCreateRequest(BaseModel):
+    account: str
+    date: str | None = None
+    currencies: list[str] | None = None
+
+
+class AccountCreateResponse(BaseModel):
+    success: bool
+    message: str
+    account: str

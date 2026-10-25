@@ -1,95 +1,128 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { ChevronRight } from 'lucide-react'
 import { api } from '@/api/client'
-import { Card, CardTitle } from '@/components/ui/card'
-import { formatMoney } from '@/lib/utils'
-
-const COLORS = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#9c27b0', '#00bcd4']
+import { PageHeader } from '@/components/PageHeader'
+import { LoadingState } from '@/components/LoadingState'
+import { MetricCard } from '@/components/charts/MetricCard'
+import { ChartShell } from '@/components/charts/ChartShell'
+import { AllocationDonut, formatDonutCenter } from '@/components/charts/AllocationDonut'
+import { BalanceStrip } from '@/components/charts/AssetsLiabilitiesBar'
+import { DataTable, DataTableHead, DataTableRow, Th, Td } from '@/components/DataTable'
+import { formatMoney, formatPercent } from '@/lib/utils'
+import { FormattedMoney } from '@/lib/privacy-blur'
+import { chartColor } from '@/lib/theme'
 
 export function OverviewPage() {
   const navigate = useNavigate()
   const { data, isLoading, error } = useQuery({ queryKey: ['overview'], queryFn: api.overview })
 
-  if (isLoading) return <p>Loading...</p>
-  if (error) return <p className="text-red-600">{String(error)}</p>
+  if (isLoading) return <LoadingState />
+  if (error) return <p className="text-[var(--color-expense)]">{String(error)}</p>
   if (!data) return null
 
   const chartData = data.categories.map((c) => ({ name: c.category, value: c.total }))
+  const liabilityPct =
+    data.total_assets > 0
+      ? (Math.abs(data.total_liabilities) / data.total_assets) * 100
+      : 0
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Overview</h1>
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardTitle>Net Worth</CardTitle>
-          <p className="mt-2 text-2xl font-bold">{formatMoney(data.net_worth, data.currency)}</p>
-        </Card>
-        <Card>
-          <CardTitle>Assets</CardTitle>
-          <p className="mt-2 text-2xl">{formatMoney(data.total_assets, data.currency)}</p>
-        </Card>
-        <Card>
-          <CardTitle>Liabilities</CardTitle>
-          <p className="mt-2 text-2xl">{formatMoney(data.total_liabilities, data.currency)}</p>
-        </Card>
+    <div className="space-y-8">
+      <PageHeader
+        title="Dashboard"
+        description="Your financial snapshot at a glance"
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <MetricCard
+          label="Net worth"
+          value={formatMoney(data.net_worth, data.currency)}
+          accent="accent"
+          onClick={() => navigate('/charts')}
+        />
+        <MetricCard
+          label="Total assets"
+          value={formatMoney(data.total_assets, data.currency)}
+          accent="income"
+          progress={100 - liabilityPct}
+        />
+        <MetricCard
+          label="Liabilities"
+          value={formatMoney(data.total_liabilities, data.currency)}
+          accent="expense"
+          progress={liabilityPct}
+          sub={liabilityPct > 0 ? `${formatPercent(liabilityPct)} of assets` : undefined}
+        />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardTitle>Assets by Category</CardTitle>
-          <table className="mt-4 w-full text-sm">
-            <thead>
-              <tr className="border-b text-left">
-                <th>Category</th>
-                <th className="text-right">Value</th>
-                <th className="text-right">%</th>
-              </tr>
-            </thead>
+      <ChartShell title="Balance composition" subtitle="Assets vs liabilities" height="h-auto">
+        <BalanceStrip
+          assets={data.total_assets}
+          liabilities={data.total_liabilities}
+          netWorth={data.net_worth}
+          currency={data.currency}
+        />
+      </ChartShell>
+
+      <div className="grid gap-6 lg:grid-cols-5">
+        <ChartShell
+          title="Asset allocation"
+          subtitle="Click a slice to filter transactions"
+          className="lg:col-span-2"
+        >
+          <AllocationDonut
+            data={chartData}
+            currency={data.currency}
+            centerLabel="Total assets"
+            centerValue={formatDonutCenter(data.total_assets, data.currency)}
+            onSliceClick={(cat) =>
+              navigate(`/transactions?search=${encodeURIComponent(cat)}`)
+            }
+          />
+        </ChartShell>
+
+        <ChartShell title="By category" className="lg:col-span-3" height="h-auto">
+          <DataTable>
+            <DataTableHead>
+              <Th>Category</Th>
+              <Th align="right">Value</Th>
+                <Th align="right">Share</Th>
+                <th className="w-8 px-2 py-3" aria-hidden />
+            </DataTableHead>
             <tbody>
-              {data.categories.map((c) => (
-                <tr
+              {data.categories.map((c, i) => (
+                <DataTableRow
                   key={c.category}
-                  className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
-                  onClick={() => navigate(`/transactions?search=${encodeURIComponent(c.category)}`)}
+                  onClick={() =>
+                    navigate(`/transactions?search=${encodeURIComponent(c.category)}`)
+                  }
                 >
-                  <td className="py-2">{c.category}</td>
-                  <td className="py-2 text-right">{formatMoney(c.total, data.currency)}</td>
-                  <td className="py-2 text-right">{c.allocation_pct.toFixed(1)}%</td>
-                </tr>
+                  <Td>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: chartColor(i) }}
+                      />
+                      {c.category}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <FormattedMoney value={c.total} currency={data.currency} />
+                  </Td>
+                  <Td align="right">
+                    <span className="text-[var(--color-fg-muted)]">
+                      {formatPercent(c.allocation_pct)}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <ChevronRight className="inline h-4 w-4 text-[var(--color-fg-subtle)]" />
+                  </Td>
+                </DataTableRow>
               ))}
             </tbody>
-          </table>
-        </Card>
-        <Card>
-          <CardTitle>Allocation</CardTitle>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label
-                  onClick={(_, index) => {
-                    const cat = chartData[index]?.name
-                    if (cat) navigate(`/transactions?search=${encodeURIComponent(cat)}`)
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {chartData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => formatMoney(v, data.currency)} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+          </DataTable>
+        </ChartShell>
       </div>
     </div>
   )

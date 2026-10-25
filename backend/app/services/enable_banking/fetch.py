@@ -4,6 +4,7 @@ from datetime import datetime
 from app.services.enable_banking.auth import (
     get_account_transactions,
     get_auth_headers,
+    is_session_expired,
     load_sessions,
 )
 import requests
@@ -32,18 +33,23 @@ def fetch_bank_transactions(
         "banks": {},
     }
     total = 0
+    errors: list[str] = []
 
     for bank_key in selected_banks:
         if bank_key not in sessions:
             continue
 
         session = sessions[bank_key]
+        if is_session_expired(session):
+            result.setdefault("errors", []).append(
+                f"{bank_configs.get(bank_key, {}).get('name', bank_key)}: session expired, please reconnect"
+            )
+            continue
         config = bank_configs.get(bank_key, {})
         bank_name = config.get("name", bank_key)
         accounts = session.get("accounts", [])
 
         accounts_data = []
-        errors = []
         for account in accounts:
             uid = account.get("uid")
             try:
@@ -65,7 +71,7 @@ def fetch_bank_transactions(
 
     result["total_transactions"] = total
     if errors:
-        result["errors"] = errors
+        result.setdefault("errors", []).extend(errors)
     return result
 
 
@@ -79,12 +85,14 @@ def get_available_banks(cache_dir, bank_configs: dict) -> list[dict]:
         name = config.get("name", key)
         session = sessions.get(key)
         if session:
-            count = len(session.get("accounts", []))
+            expired = is_session_expired(session)
+            count = 0 if expired else len(session.get("accounts", []))
             banks.append({
                 "key": key,
                 "name": name,
                 "accounts": count,
-                "authorized": True,
+                "authorized": not expired,
+                "expired": expired,
             })
         else:
             banks.append({
@@ -92,6 +100,7 @@ def get_available_banks(cache_dir, bank_configs: dict) -> list[dict]:
                 "name": name,
                 "accounts": 0,
                 "authorized": False,
+                "expired": False,
             })
 
     return banks
